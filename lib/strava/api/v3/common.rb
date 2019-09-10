@@ -24,6 +24,7 @@ module Strava::Api::V3
       pre_call_args = {path: path, args: args, verb: verb}
       pre_call_result = pre_call.call(pre_call_args) unless pre_call.nil?
       result = pre_call_result || api(path, args, verb, options) do |response|
+        set_rate_usage response.headers
         error = check_response(response.code, response.body)
         raise error if error
       end
@@ -33,6 +34,24 @@ module Strava::Api::V3
 
       # now process as appropriate for the given call (get picture header, etc.)
       post_processing ? post_processing.call(result) : result
+    end
+
+    # Set our rate limit usage stats in Redis.
+    def set_rate_usage(resp)
+      rate_limit = resp["x-ratelimit-limit"]
+      usage_limit = resp["x-ratelimit-usage"]
+      short_limit = rate_limit.split(",")[0].to_i
+      long_limit = rate_limit.split(",")[1].to_i
+      short_usage = usage_limit.split(",")[0].to_i
+      long_usage = usage_limit.split(",")[1].to_i
+      quarter_hours_left = [(DateTime.now.utc.end_of_day.to_i - DateTime.now.utc.to_i) / 900, 1].max
+      short_max = [ ( (long_limit - long_usage) / quarter_hours_left.to_f).to_i, short_limit].min
+      $redis.set("strava_short_limit", short_limit)
+      $redis.set("strava_long_limit", long_limit)
+      $redis.set("strava_short_usage", short_usage)
+      $redis.set("strava_long_usage", long_usage)
+      $redis.set("strava_last_time", DateTime.now.to_i)
+      $redis.set("strava_short_max", short_max)
     end
 
     # Makes a request to the appropriate Facebook API.
