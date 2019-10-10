@@ -40,6 +40,7 @@ module Strava::Api::V3
     def set_rate_usage(resp)
       rate_limit = resp["x-ratelimit-limit"]
       usage_limit = resp["x-ratelimit-usage"]
+      return if rate_limit.nil? or usage_limit.nil?
       short_limit = rate_limit.split(",")[0].to_i
       long_limit = rate_limit.split(",")[1].to_i
       short_usage = usage_limit.split(",")[0].to_i
